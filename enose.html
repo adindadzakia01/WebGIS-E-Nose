@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebGIS E-Nose Pro Monitoring</title>
+    
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/raphael/2.3.0/raphael.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/justgage/1.6.1/justgage.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"/>
+    
+    <style>
+        * { box-sizing: border-box; }
+        body { font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; margin: 0; padding: 0; display: flex; flex-direction: column; height: 100vh; background-color: #0b0f19; color: #e2e8f0; }
+        
+        /* HEADER BAR */
+        header { 
+            background: linear-gradient(90deg, #0f172a 0%, #1e293b 100%); 
+            color: #f8fafc; padding: 12px 24px; font-size: 18px; font-weight: 700; 
+            display: flex; justify-content: space-between; align-items: center;
+            border-bottom: 1px solid #334155; box-shadow: 0 4px 15px rgba(0,0,0,0.5); z-index: 1000; 
+        }
+        
+        .header-title { display: flex; align-items: center; gap: 10px; }
+        .header-controls { display: flex; align-items: center; gap: 15px; }
+
+        /* CONTENT CONTAINER */
+        #content { display: flex; flex: 1; height: calc(100vh - 55px); overflow: hidden; }
+        
+        /* SIDEBAR / DASHBOARD PANEL */
+        #sidebar { 
+            width: 450px; padding: 18px; background: rgba(15, 23, 42, 0.95); 
+            backdrop-filter: blur(12px); overflow-y: auto; 
+            border-right: 1px solid #334155; display: flex; flex-direction: column; gap: 14px; z-index: 1000; 
+        }
+        #sidebar::-webkit-scrollbar { width: 6px; }
+        #sidebar::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
+        
+        #map { flex: 1; height: 100%; z-index: 1; }
+        
+        /* CARDS / GLASSMORPHISM DESIGN */
+        .card { 
+            background: #1e293b; border: 1px solid #334155; border-radius: 12px; 
+            padding: 14px; box-shadow: 0 4px 12px rgba(0,0,0,0.25); transition: all 0.3s ease; 
+        }
+        .card:hover { border-color: #3b82f6; }
+        
+        .card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; border-bottom: 1px solid #334155; padding-bottom: 6px; }
+        .card-title { font-size: 13px; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.6px; display: flex; align-items: center; gap: 6px; }
+        
+        /* GAUGE CONTAINER */
+        .gauge-wrapper { display: flex; justify-content: space-between; gap: 10px; margin-top: 5px; }
+        .gauge-box { flex: 1; text-align: center; background: #0f172a; padding: 8px; border-radius: 10px; border: 1px solid #334155; }
+        .gauge-widget { width: 100%; height: 110px; }
+        .adc-text { font-size: 11px; color: #64748b; margin-top: -5px; font-weight: 600; }
+        
+        /* STATUS BADGES */
+        .badge-status { padding: 3px 8px; border-radius: 12px; font-size: 11px; font-weight: 700; text-transform: uppercase; }
+        .badge-aman { background: rgba(16, 185, 129, 0.15); color: #10b981; border: 1px solid #10b981; }
+        .badge-waspada { background: rgba(245, 158, 11, 0.15); color: #f59e0b; border: 1px solid #f59e0b; }
+        .badge-bahaya { background: rgba(239, 68, 68, 0.15); color: #ef4444; border: 1px solid #ef4444; }
+        
+        /* BUTTONS */
+        .btn-flex { display: flex; gap: 6px; flex-wrap: wrap; }
+        .btn-action { 
+            flex: 1; background: linear-gradient(135deg, #1e293b 0%, #334155 100%); 
+            color: #f8fafc; border: 1px solid #475569; padding: 8px; border-radius: 8px; 
+            font-size: 11px; font-weight: 600; cursor: pointer; display: flex; justify-content: center; align-items: center; gap: 6px; 
+            transition: all 0.2s ease; white-space: nowrap;
+        }
+        .btn-action:hover { background: #3b82f6; border-color: #60a5fa; color: white; }
+        .btn-action.active { background: linear-gradient(135deg, #10b981 0%, #059669 100%); border-color: #34d399; box-shadow: 0 0 10px rgba(16, 185, 129, 0.4); }
+        .btn-export { background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%); border-color: #38bdf8; }
+        .btn-export:hover { background: #0284c7; }
+        .btn-img { background: linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%); border-color: #a78bfa; }
+        .btn-img:hover { background: #7c3aed; }
+
+        /* WEATHER WIDGET */
+        .weather-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; text-align: center; }
+        .weather-item { background: #0f172a; padding: 8px 4px; border-radius: 8px; border: 1px solid #334155; }
+        .weather-val { font-size: 13px; font-weight: 700; color: #38bdf8; margin-top: 2px; }
+        .weather-lbl { font-size: 9px; color: #64748b; text-transform: uppercase; }
+
+        /* CHART BOX */
+        .chart-box { position: relative; height: 180px; width: 100%; margin-top: 5px; }
+
+        /* LIGHT MODE STYLES */
+        body.light-mode { background-color: #f1f5f9; color: #0f172a; }
+        body.light-mode header { background: linear-gradient(90deg, #ffffff 0%, #e2e8f0 100%); color: #0f172a; border-bottom-color: #cbd5e1; }
+        body.light-mode #sidebar { background: rgba(255, 255, 255, 0.95); border-right-color: #cbd5e1; }
+        body.light-mode .card { background: #ffffff; border-color: #cbd5e1; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
+        body.light-mode .gauge-box, body.light-mode .weather-item { background: #f8fafc; border-color: #e2e8f0; }
+        body.light-mode .card-title { color: #64748b; }
+        body.light-mode .adc-text, body.light-mode .weather-lbl { color: #64748b; }
+        body.light-mode .btn-action { background: #e2e8f0; color: #0f172a; border-color: #cbd5e1; }
+    </style>
+</head>
+<body>
+
+    <header>
+        <div class="header-title">
+            <i class="fa-solid fa-wind" style="color:#3b82f6;"></i>
+            <span>WebGIS E-Nose Monitoring System</span>
+        </div>
+        <div class="header-controls">
+            <span id="liveClock" style="font-size: 13px; color: #38bdf8; font-family: monospace; font-weight: 700;">--:--:--</span>
+            <button onclick="toggleTheme()" class="btn-action" style="padding: 6px 12px; font-size: 11px;" id="themeBtn">
+                <i class="fa-solid fa-sun"></i> Terang
+            </button>
+        </div>
+    </header>
+
+    <div id="content">
+        <div id="sidebar">
+            
+            <div class="btn-flex">
+                <button id="btnAudio" class="btn-action" onclick="aktifkanAudio()">
+                    <i class="fa-solid fa-bell-slash"></i> Alarm
+                </button>
+                <button class="btn-action btn-export" onclick="exportKeCSVLengkap()">
+                    <i class="fa-solid fa-file-csv"></i> Download CSV Full
+                </button>
+                <button class="btn-action btn-img" onclick="exportGrafikPNG()">
+                    <i class="fa-solid fa-file-image"></i> Grafik (PNG)
+                </button>
+            </div>
+
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-title"><i class="fa-solid fa-gauge-high"></i> Indicator Gas (PPM Gauge)</span>
+                    <span class="badge-status badge-aman" id="badgeGlobal">AMAN</span>
+                </div>
+                <div class="gauge-wrapper">
+                    <div class="gauge-box">
+                        <div id="gaugeMQ4" class="gauge-widget"></div>
+                        <div class="adc-text" id="adcMQ4">ADC Raw: 0</div>
+                    </div>
+                    <div class="gauge-box">
+                        <div id="gaugeMQ7" class="gauge-widget"></div>
+                        <div class="adc-text" id="adcMQ7">ADC Raw: 0</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-title"><i class="fa-solid fa-cloud-sun"></i> Cuaca API</span>
+                </div>
+                <div class="weather-grid">
+                    <div class="weather-item">
+                        <i class="fa-solid fa-temperature-half" style="color:#f59e0b;"></i>
+                        <div class="weather-val" id="wTemp">-- °C</div>
+                        <div class="weather-lbl">Suhu</div>
+                    </div>
+                    <div class="weather-item">
+                        <i class="fa-solid fa-droplet" style="color:#38bdf8;"></i>
+                        <div class="weather-val" id="wHumidity">-- %</div>
+                        <div class="weather-lbl">Kelembapan</div>
+                    </div>
+                    <div class="weather-item">
+                        <i class="fa-solid fa-wind" style="color:#10b981;"></i>
+                        <div class="weather-val" id="wWindSpeed">-- km/h</div>
+                        <div class="weather-lbl">Kecepatan</div>
+                    </div>
+                    <div class="weather-item">
+                        <i class="fa-solid fa-compass" style="color:#a855f7;"></i>
+                        <div class="weather-val" id="wWindDir">--</div>
+                        <div class="weather-lbl">Arah Angin</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card" style="border-left: 4px solid #3b82f6;">
+                <div class="card-header">
+                    <span class="card-title"><i class="fa-solid fa-calendar-days"></i> Kalender Pranata Mangsa</span>
+                </div>
+                <div style="display:flex; justify-content:space-between; margin-bottom:5px; font-size:13px;">
+                    <span style="color:#94a3b8;">Musim:</span> <strong id="teksMusim" style="color:#3b82f6;">-</strong>
+                </div>
+                <div style="display:flex; justify-content:space-between; margin-bottom:5px; font-size:13px;">
+                    <span style="color:#94a3b8;">Tingkat Risiko:</span> <strong id="teksRisiko" style="color:#f59e0b;">-</strong>
+                </div>
+                <div style="display:flex; justify-content:space-between; font-size:13px;">
+                    <span style="color:#94a3b8;">Ambang Bahaya (ADC):</span> <strong id="teksAmbang" style="color:#ef4444;">-</strong>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-title"><i class="fa-solid fa-chart-line"></i> Grafik Tren Realtime</span>
+                    <button class="btn-action" style="padding: 2px 8px; font-size: 10px; flex: none;" onclick="toggleTipeGrafik()" id="btnTipeGrafik">
+                        <i class="fa-solid fa-circle-dot"></i> Mode Titik
+                    </button>
+                </div>
+                <div class="chart-box">
+                    <canvas id="grafikGas"></canvas>
+                </div>
+            </div>
+
+            <div style="font-size: 11px; color: #64748b; text-align: center;" id="logFirebase">
+                Terhubung ke Firebase Realtime Database
+            </div>
+        </div>
+        
+        <div id="map"></div>
+    </div>
+
+    <script>
+        const FIREBASE_URL = "https://e-nose-ed2e4-default-rtdb.firebaseio.com/enose.json";
+        let logHistory = [];
+
+        // KUNCI KOORDINAT TETAP DI SMAN 1 SLEMAN
+        const LOKASI_NAMA = "SMA Negeri 1 Sleman";
+        const LATITUDE_FIX = -7.6830177;
+        const LONGITUDE_FIX = 110.3390445;
+
+        let currentTemp = "--";
+        let currentHumidity = "--";
+        let currentWindSpeed = "--";
+
+        // 1. LIVE CLOCK
+        setInterval(() => {
+            document.getElementById('liveClock').innerText = new Date().toLocaleTimeString('id-ID');
+        }, 1000);
+
+        // 2. THEME SWITCHER
+        function toggleTheme() {
+            document.body.classList.toggle('light-mode');
+            let btn = document.getElementById('themeBtn');
+            if (document.body.classList.contains('light-mode')) {
+                btn.innerHTML = `<i class="fa-solid fa-moon"></i> Gelap`;
+            } else {
+                btn.innerHTML = `<i class="fa-solid fa-sun"></i> Terang`;
+            }
+        }
+        toggleTheme();
+
+        // 3. AUDIO ALARM SYSTEM
+        let audioCtx, alarmInterval, isAlarmPlaying = false, izinAudio = false;
+        function bunyiBeep() {
+            if (!audioCtx) return;
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            const osc = audioCtx.createOscillator();
+            const gainNode = audioCtx.createGain();
+            osc.type = 'sawtooth'; 
+            osc.frequency.setValueAtTime(880, audioCtx.currentTime); 
+            gainNode.gain.setValueAtTime(0.12, audioCtx.currentTime); 
+            osc.connect(gainNode);
+            gainNode.connect(audioCtx.destination);
+            osc.start(audioCtx.currentTime);
+            osc.stop(audioCtx.currentTime + 0.15); 
+        }
+
+        function aktifkanAudio() {
+            izinAudio = true;
+            if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            bunyiBeep(); 
+            let btn = document.getElementById('btnAudio');
+            btn.className = "btn-action active";
+            btn.innerHTML = `<i class="fa-solid fa-bell"></i> Alarm Aktif`;
+        }
+
+        function nyalakanAlarm() {
+            if (!isAlarmPlaying && izinAudio && audioCtx) {
+                isAlarmPlaying = true;
+                alarmInterval = setInterval(bunyiBeep, 50); 
+            }
+        }
+
+        function matikanAlarm() {
+            if (isAlarmPlaying) {
+                isAlarmPlaying = false;
+                clearInterval(alarmInterval); 
+            }
+        }
+
+        // 4. JUSTGAGE CHARTS
+        var gageMQ4 = new JustGage({
+            id: "gaugeMQ4", value: 0, min: 0, max: 500, title: "MQ-4 (Metana)", label: "PPM",
+            valueFontColor: "#64748b", titleFontColor: "#64748b", gaugeColor: "#e2e8f0",
+            levelColors: ["#10b981", "#f59e0b", "#ef4444"]
+        });
+
+        var gageMQ7 = new JustGage({
+            id: "gaugeMQ7", value: 0, min: 0, max: 200, title: "MQ-7 (CO)", label: "PPM",
+            valueFontColor: "#64748b", titleFontColor: "#64748b", gaugeColor: "#e2e8f0",
+            levelColors: ["#10b981", "#f59e0b", "#ef4444"]
+        });
+
+        // 5. LEAFLET MAP (Google Maps Bersih & Dikunci ke SMAN 1 Sleman)
+        var map = L.map('map').setView([LATITUDE_FIX, LONGITUDE_FIX], 17); 
+        L.tileLayer('https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}', { 
+            maxZoom: 20,
+            attribution: '© Google Maps'
+        }).addTo(map);
+
+        var sensorMarker = L.marker([LATITUDE_FIX, LONGITUDE_FIX]).addTo(map);
+        sensorMarker.bindPopup(`<b>${LOKASI_NAMA}</b><br>Titik Stasiun Tetap`);
+
+        var radiusZona = L.circle([LATITUDE_FIX, LONGITUDE_FIX], {
+            color: '#10b981', fillColor: '#10b981', fillOpacity: 0.3, radius: 80
+        }).addTo(map);
+
+        // 6. CHART.JS CONFIGURATION
+        let isScatterMode = false;
+        const ctx = document.getElementById('grafikGas').getContext('2d');
+        const chartGas = new Chart(ctx, {
+            type: 'line',
+            data: { 
+                labels: [], 
+                datasets: [
+                    { label: 'MQ-4 CH4', data: [], borderColor: '#f59e0b', backgroundColor: '#f59e0b', borderWidth: 2, pointRadius: 4, showLine: true, tension: 0.3 },
+                    { label: 'MQ-7 CO', data: [], borderColor: '#ef4444', backgroundColor: '#ef4444', borderWidth: 2, pointRadius: 4, showLine: true, tension: 0.3 }
+                ] 
+            },
+            options: { 
+                responsive: true, maintainAspectRatio: false,
+                scales: { 
+                    y: { beginAtZero: true, grid: { color: '#cbd5e1' }, ticks: { color: '#64748b' } }, 
+                    x: { display: false } 
+                }, 
+                plugins: { legend: { labels: { color: '#64748b', font: { size: 10 } } } }, 
+                animation: { duration: 0 } 
+            }
+        });
+
+        function toggleTipeGrafik() {
+            isScatterMode = !isScatterMode;
+            let btn = document.getElementById('btnTipeGrafik');
+            
+            chartGas.data.datasets.forEach(ds => {
+                ds.showLine = !isScatterMode;
+                ds.pointRadius = isScatterMode ? 6 : 4;
+            });
+            chartGas.update();
+
+            if (isScatterMode) {
+                btn.innerHTML = `<i class="fa-solid fa-chart-line"></i> Mode Garis`;
+            } else {
+                btn.innerHTML = `<i class="fa-solid fa-circle-dot"></i> Mode Titik`;
+            }
+        }
+
+        // 7. FETCH DATA FIREBASE REALTIME
+        function ambilDataFirebase() {
+            fetch(FIREBASE_URL, { cache: "no-store" })
+                .then(res => res.json())
+                .then(data => {
+                    if(data) {
+                        let ppmMQ4 = data.ppm_mq4 ?? 0;
+                        let ppmMQ7 = data.ppm_mq7 ?? 0;
+                        let adcMQ4 = data.kadar_mq4 ?? 0;
+                        let adcMQ7 = data.kadar_mq7 ?? 0;
+
+                        gageMQ4.refresh(ppmMQ4);
+                        gageMQ7.refresh(ppmMQ7);
+                        document.getElementById('adcMQ4').innerText = "ADC Raw: " + adcMQ4;
+                        document.getElementById('adcMQ7').innerText = "ADC Raw: " + adcMQ7;
+
+                        currentTemp = data.suhu ?? "--";
+                        currentHumidity = data.kelembapan ?? "--";
+                        currentWindSpeed = data.kecepatan_angin ?? "--";
+                        
+                        document.getElementById('wTemp').innerText = currentTemp + " °C";
+                        document.getElementById('wHumidity').innerText = currentHumidity + " %";
+                        document.getElementById('wWindSpeed').innerText = currentWindSpeed + " m/s";
+
+                        let musimMangsa = data.musim_mangsa || "-";
+                        let tingkatRisiko = data.tingkat_risiko || "-";
+                        let ambangBatas = data.ambang_batas || 400;
+
+                        document.getElementById('teksMusim').innerText = musimMangsa;
+                        document.getElementById('teksRisiko').innerText = tingkatRisiko;
+                        document.getElementById('teksAmbang').innerText = ">= " + ambangBatas;
+
+                        let statusLog = data.status || "Aman";
+                        let badgeGlobal = document.getElementById('badgeGlobal');
+
+                        if (statusLog.includes("BAHAYA")) {
+                            nyalakanAlarm();
+                            badgeGlobal.className = "badge-status badge-bahaya";
+                            badgeGlobal.innerText = "BAHAYA";
+                            radiusZona.setStyle({ color: '#ef4444', fillColor: '#ef4444' });
+                            sensorMarker.bindPopup(`<b>⚠️ BAHAYA TERDETEKSI!</b><br>MQ-4: ${ppmMQ4} PPM<br>MQ-7: ${ppmMQ7} PPM`).openPopup();
+                        } else if (statusLog.includes("Waspada")) {
+                            matikanAlarm();
+                            badgeGlobal.className = "badge-status badge-waspada";
+                            badgeGlobal.innerText = "WASPADA";
+                            radiusZona.setStyle({ color: '#f59e0b', fillColor: '#f59e0b' });
+                            sensorMarker.bindPopup(`<b>Waspada Gas Tipis</b>`);
+                        } else {
+                            matikanAlarm();
+                            badgeGlobal.className = "badge-status badge-aman";
+                            badgeGlobal.innerText = "AMAN";
+                            radiusZona.setStyle({ color: '#10b981', fillColor: '#10b981' });
+                            sensorMarker.bindPopup(`<b>Kondisi Aman</b>`);
+                        }
+
+                        // REKAMAN LOG LENGKAP MENGGUNAKAN KOORDINAT TETAP SMAN 1 SLEMAN
+                        logHistory.push({
+                            waktu: data.waktu || new Date().toLocaleString(),
+                            lokasi: LOKASI_NAMA,
+                            lat: LATITUDE_FIX,
+                            lon: LONGITUDE_FIX,
+                            mq4_adc: adcMQ4, 
+                            mq4_ppm: ppmMQ4,
+                            mq7_adc: adcMQ7, 
+                            mq7_ppm: ppmMQ7,
+                            suhu: currentTemp,
+                            kelembapan: currentHumidity,
+                            kecepatan_angin: currentWindSpeed,
+                            musim: musimMangsa,
+                            risiko: tingkatRisiko,
+                            status: statusLog
+                        });
+                        if(logHistory.length > 500) logHistory.shift();
+
+                        let waktuJam = data.waktu ? (data.waktu.split(" ")[1] || "") : ""; 
+                        if (chartGas.data.labels.length >= 25) {
+                            chartGas.data.labels.shift();
+                            chartGas.data.datasets[0].data.shift();
+                            chartGas.data.datasets[1].data.shift();
+                        }
+                        chartGas.data.labels.push(waktuJam);
+                        chartGas.data.datasets[0].data.push(ppmMQ4);
+                        chartGas.data.datasets[1].data.push(ppmMQ7);
+                        chartGas.update();
+                    }
+                });
+        }
+
+        setInterval(ambilDataFirebase, 2000);
+        ambilDataFirebase();
+
+        // 8. EXPORT KE CSV LENGKAP UTUH
+        function exportKeCSVLengkap() {
+            if(logHistory.length === 0) {
+                alert("Belum ada data untuk diunduh!");
+                return;
+            }
+            
+            let csvContent = "data:text/csv;charset=utf-8,Waktu,Lokasi,Latitude,Longitude,MQ4_ADC,MQ4_PPM,MQ7_ADC,MQ7_PPM,Suhu_C,Kelembapan_Pct,KecepatanAngin,Musim_Mangsa,Tingkat_Risiko,Status\n";
+            
+            logHistory.forEach(row => {
+                csvContent += `"${row.waktu}","${row.lokasi}",${row.lat},${row.lon},${row.mq4_adc},${row.mq4_ppm},${row.mq7_adc},${row.mq7_ppm},"${row.suhu}","${row.kelembapan}","${row.kecepatan_angin}","${row.musim}","${row.risiko}","${row.status}"\n`;
+            });
+            
+            let encodedUri = encodeURI(csvContent);
+            let link = document.createElement("a");
+            link.setAttribute("href", encodedUri);
+            link.setAttribute("download", `log_full_enose_${new Date().toISOString().slice(0,10)}.csv`);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+
+        // 9. EXPORT GRAFIK PNG
+        function exportGrafikPNG() {
+            let canvas = document.getElementById('grafikGas');
+            let imageURI = canvas.toDataURL('image/png');
+            let link = document.createElement('a');
+            link.setAttribute('href', imageURI);
+            link.setAttribute('download', `grafik_enose_${new Date().toISOString().slice(0,10)}.png`);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+    </script>
+</body>
+</html>
